@@ -1493,6 +1493,7 @@ foreach(target_name ${ONNXRUNTIME_CMAKE_FILES})
 endforeach()
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../samples/fns_candy_style_transfer" "${CMAKE_BINARY_DIR}/samples/")
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../samples/fns_candy_style_transfer_cxx" "${CMAKE_BINARY_DIR}/samples_cxx/")
 
 if (UNIX)
   option(BUILD_PKGCONFIG_FILES "Build and install pkg-config files" ON)
