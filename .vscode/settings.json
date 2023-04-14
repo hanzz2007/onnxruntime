@@ -39,5 +39,8 @@
     "cpplint.filters": [
         "-build/include_subdir",
         "-runtime/references"
-    ]
+    ],
+    "C_Cpp.intelliSenseEngineFallback": "enabled",
+    "C_Cpp.default.compileCommands": "build/Linux/Debug/compile_commands.json",
+
 }
