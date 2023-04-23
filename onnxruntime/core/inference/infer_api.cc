@@ -172,7 +172,7 @@ static ORT_STATUS_PTR CreateSessionAndLoadModel(const OrtNetOptions* options,
 
 static ORT_STATUS_PTR InitializeSession(const OrtNetOptions* options,
                                         const std::unordered_map<std::string, void*>& user_streams,
-                                        std::unique_ptr<::onnxruntime::InferenceSession>& sess,
+                                        ::onnxruntime::InferenceSession* sess,
                                         OrtPrepackedWeightsContainer* prepacked_weights_container,
                                         const ModelWeightPtr model_weight) {
   // we need to disable mem pattern if DML is one of the providers since DML doesn't have the concept of
@@ -244,13 +244,10 @@ OrtStatusPtr OrtNetwork_CreateExecutor(OrtNetwork* network, const OrtExecOptions
     std::unique_ptr<OrtExecutor> executor(new OrtExecutor);
     std::unique_lock<std::mutex> lock(network->init_mutex);
 
-    if (!network->session) {
-      std::unique_ptr<InferenceSession> session;
-      ORT_API_RETURN_IF_ERROR(CreateSessionAndLoadModel(&network->options, network->env, nullptr, network->model_data.data(),
-                                                        network->model_data.size(), session));
-      ORT_API_RETURN_IF_ERROR(InitializeSession(&network->options, exec_options->streams_map, session,
+    if (!network->session_inited) {
+      ORT_API_RETURN_IF_ERROR(InitializeSession(&network->options, exec_options->streams_map, network->session.get(),
                                                 nullptr, nullptr));
-      network->session = std::move(session);
+      network->session_inited = true;
       network->streams_map = exec_options->streams_map;
     }
 
@@ -260,7 +257,7 @@ OrtStatusPtr OrtNetwork_CreateExecutor(OrtNetwork* network, const OrtExecOptions
       std::unique_ptr<onnxruntime::InferenceSession> session;
       ORT_API_RETURN_IF_ERROR(CreateSessionAndLoadModel(&network->options, network->env, nullptr, network->model_data.data(),
                                                         network->model_data.size(), session));
-      ORT_API_RETURN_IF_ERROR(InitializeSession(&network->options, exec_options->streams_map, session,
+      ORT_API_RETURN_IF_ERROR(InitializeSession(&network->options, exec_options->streams_map, session.get(),
                                                 nullptr, network->session->GetSessionState().GetWeight()));
       executor->session = std::move(session);
     } else {
@@ -290,10 +287,10 @@ void OrtNetwork_DestroyExecutor(OrtNetwork* network, OrtExecutor* executor) {
 }
 
 OrtStatusPtr OrtExecutor_Run(OrtExecutor* executor, const OrtRunOptions* run_options,
-                          const char* const* input_names,
-                          const OrtValue* const* input, size_t input_len,
-                          const char* const* output_names1, size_t output_names_len,
-                          OrtValue** output) {
+                             const char* const* input_names,
+                             const OrtValue* const* input, size_t input_len,
+                             const char* const* output_names1, size_t output_names_len,
+                             OrtValue** output) {
   return OrtApis::Run((OrtSession*)executor->session.get(), run_options, input_names, input, input_len,
                       output_names1, output_names_len, output);
 }
@@ -305,6 +302,12 @@ OrtStatusPtr OrtNetwork_Create(const OrtEnv* env, OrtNetOptions* options, const 
   network->model_data.resize(model_data_length);
   network->env = env;
   std::copy((const uint8_t*)model_data, (const uint8_t*)model_data + model_data_length, network->model_data.begin());
+
+  std::unique_ptr<InferenceSession> session;
+  ORT_API_RETURN_IF_ERROR(CreateSessionAndLoadModel(&network->options, network->env, nullptr, model_data,
+                                                    model_data_length, session));
+  network->session = std::move(session);
+
   *out = network.release();
   return nullptr;
   API_IMPL_END
@@ -321,27 +324,25 @@ void OrtNetwork_Destroy(OrtNetwork* network) {
 #define ORT_INFER_API_IMPL_ITEM(name) &::name
 
 static const OrtInferenceApi inference_api = {
-  ORT_INFER_API_IMPL_ITEM(OrtNetOptions_Create),
-  ORT_INFER_API_IMPL_ITEM(OrtNetOptions_Destroy),
-  ORT_INFER_API_IMPL_ITEM(OrtNetOptions_SetParam),
-  ORT_INFER_API_IMPL_ITEM(OrtNetOptions_AppendExecutionProvider),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_Create),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_Destroy),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetInputCount),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetOutputCount),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetInputTypeInfo),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetOutputTypeInfo),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetInputName),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetOutputName),
-  ORT_INFER_API_IMPL_ITEM(OrtExecOptions_Create),
-  ORT_INFER_API_IMPL_ITEM(OrtExecOptions_Destroy),
-  ORT_INFER_API_IMPL_ITEM(OrtExecOptions_SetUserStream),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_CreateExecutor),
-  ORT_INFER_API_IMPL_ITEM(OrtNetwork_DestroyExecutor),
-  ORT_INFER_API_IMPL_ITEM(OrtExecutor_Run)
-};
+    ORT_INFER_API_IMPL_ITEM(OrtNetOptions_Create),
+    ORT_INFER_API_IMPL_ITEM(OrtNetOptions_Destroy),
+    ORT_INFER_API_IMPL_ITEM(OrtNetOptions_SetParam),
+    ORT_INFER_API_IMPL_ITEM(OrtNetOptions_AppendExecutionProvider),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_Create),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_Destroy),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetInputCount),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetOutputCount),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetInputTypeInfo),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetOutputTypeInfo),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetInputName),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_GetOutputName),
+    ORT_INFER_API_IMPL_ITEM(OrtExecOptions_Create),
+    ORT_INFER_API_IMPL_ITEM(OrtExecOptions_Destroy),
+    ORT_INFER_API_IMPL_ITEM(OrtExecOptions_SetUserStream),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_CreateExecutor),
+    ORT_INFER_API_IMPL_ITEM(OrtNetwork_DestroyExecutor),
+    ORT_INFER_API_IMPL_ITEM(OrtExecutor_Run)};
 
-const OrtInferenceApi* OrtGetInferenceApi()
-{
+const OrtInferenceApi* OrtGetInferenceApi() {
   return &inference_api;
 }

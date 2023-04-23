@@ -30,9 +30,9 @@ struct OrtNetOptions {
   // std::vector<std::string> custom_op_libraries;
 
   OrtNetOptions() = default;
-  ~OrtNetOptions();
-  OrtNetOptions(const OrtNetOptions& other);
-  OrtNetOptions& operator=(const OrtNetOptions& other);
+  // ~OrtNetOptions();
+  // OrtNetOptions(const OrtNetOptions& other);
+  // OrtNetOptions& operator=(const OrtNetOptions& other);
 };
 
 struct ModelWeight;
@@ -80,6 +80,7 @@ class InferenceSession;
 }
 
 struct OrtNetwork {
+  bool session_inited{false};
   std::shared_ptr<onnxruntime::InferenceSession> session;
   std::unordered_map<std::string, void*> streams_map;
   OrtNetOptions options;

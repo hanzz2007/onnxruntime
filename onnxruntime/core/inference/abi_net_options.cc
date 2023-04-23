@@ -18,15 +18,17 @@
 
 using OrtApis::CreateStatus;
 
-OrtNetOptions::~OrtNetOptions() = default;
+// OrtNetOptions::~OrtNetOptions() = default;
 
-OrtNetOptions& OrtNetOptions::operator=(const OrtNetOptions&) {
-  ORT_THROW("not implemented");
-}
+// OrtNetOptions& OrtNetOptions::operator=(const OrtNetOptions& other) {
+//   // ORT_THROW("not implemented");
+//   this->value = value;
+//   thi
+// }
 
-OrtNetOptions::OrtNetOptions(const OrtNetOptions& other)
-    : value(other.value), provider_factory_creators(other.provider_factory_creators) {
-}
+// OrtNetOptions::OrtNetOptions(const OrtNetOptions& other)
+//     : value(other.value), provider_factory_creators(other.provider_factory_creators) {
+// }
 
 OrtStatusPtr OrtNetOptions_Create(OrtNetOptions** out) {
   API_IMPL_BEGIN

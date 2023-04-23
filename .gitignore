@@ -56,3 +56,6 @@ onnxruntime/python/version_info.py
 .envrc
 .psenvrc
 *.csproj.user
+onnxruntime/core/session/out.png
+onnxruntime/core/inference/*.png
+samples/fns_candy_*/*.png
