@@ -148,7 +148,6 @@ int main(int argc, char* argv[]) {
   auto& output_tensor = output_tensors.front();
 
   auto output_tensor_data = output_tensor.GetTensorMutableData<float>();
-  // auto output_tensor_data2 = output_tensor.GetTensorMutableRawData<float>();
 
   uint8_t* output_image_data = NULL;
   chw_to_hwc(output_tensor_data, 720, 720, &output_image_data);
@@ -158,39 +157,6 @@ int main(int argc, char* argv[]) {
 
   return 0;
 
-  // OrtValue* output_tensor = NULL;
-  // ORT_ABORT_ON_ERROR(g_ort->Run(session, NULL, input_names, (const OrtValue* const*)&input_tensor, 1, output_names, 1,
-  //                               &output_tensor));
-  // assert(output_tensor != NULL);
-  // ORT_ABORT_ON_ERROR(g_ort->IsTensor(output_tensor, &is_tensor));
-  // assert(is_tensor);
-  // int ret = 0;
-  // float* output_tensor_data = NULL;
-  // ORT_ABORT_ON_ERROR(g_ort->GetTensorMutableData(output_tensor, (void**)&output_tensor_data));
-  // uint8_t* output_image_data = NULL;
-  // chw_to_hwc(output_tensor_data, 720, 720, &output_image_data);
-  // if (write_image_file(output_image_data, 720, 720, output_file) != 0) {
-  //   ret = -1;
-  // }
-  // g_ort->ReleaseValue(output_tensor);
-  // g_ort->ReleaseValue(input_tensor);
-  // free(model_input);
-  // return ret;
-
-
-
-  // g_ort->EnableProfiling(session_options, "./fns_candy_prof.json");
-
-  // OrtSession* session;
-  // ORT_ABORT_ON_ERROR(g_ort->CreateSession(env, model_path, session_options, &session));
-  // verify_input_output_count(session);
-  // ret = run_inference(session, input_file, output_file);
-  // g_ort->ReleaseSessionOptions(session_options);
-  // g_ort->ReleaseSession(session);
-  // g_ort->ReleaseEnv(env);
-  // if (ret != 0) {
-  //   fprintf(stderr, "fail\n");
-  // }
 #ifdef _WIN32
   CoUninitialize();
 #endif

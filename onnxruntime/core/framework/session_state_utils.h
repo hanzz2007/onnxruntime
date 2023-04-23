@@ -44,8 +44,9 @@ common::Status SaveInitializedTensors(
     const DataTransferManager& data_transfer_mgr,
     const ExecutionPlanBase& exec_plan,
     const SessionOptions& session_options,
+    bool is_own_weight,
     const MemoryProfileFunction& memory_profile_func);
-    
+
 common::Status SaveInputOutputNamesToNodeMapping(const GraphViewer& graph,
                                                  SessionState& session_state,
                                                  gsl::span<const NodeArg* const> implicit_inputs);

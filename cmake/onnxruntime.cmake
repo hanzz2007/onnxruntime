@@ -172,6 +172,7 @@ endif()
 # Earlier entries may depend on later ones. Later ones should not depend on earlier ones.
 set(onnxruntime_INTERNAL_LIBRARIES
   onnxruntime_session
+  onnxruntime_inference
   ${onnxruntime_libs}
   ${PROVIDERS_ACL}
   ${PROVIDERS_ARMNN}

@@ -1242,7 +1242,7 @@ static void ResolveMemoryPatternFlags(SessionState& session_state) {
 // VC++ reports: "Releasing unheld lock 'l' in function 'onnxruntime::InferenceSession::Initialize'". But I don't see anything wrong.
 #pragma warning(disable : 26117)
 #endif
-common::Status InferenceSession::Initialize() {
+common::Status InferenceSession::Initialize(const ModelWeightPtr& weight) {
   Status status = Status::OK();
   TimePoint tp;
   if (session_profiler_.IsEnabled()) {
@@ -1497,7 +1497,8 @@ common::Status InferenceSession::Initialize() {
                                              session_options_,
                                              // need to keep the initializers if saving the optimized model
                                              !saving_model,
-                                             saving_ort_format));
+                                             saving_ort_format,
+                                             weight));
 
 #if !defined(ORT_MINIMAL_BUILD)
     if (saving_model) {

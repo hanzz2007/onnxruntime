@@ -301,7 +301,7 @@ class InferenceSession {
    * This API is thread-safe.
    * @return OK if success
    */
-  common::Status Initialize() ORT_MUST_USE_RESULT;
+  common::Status Initialize(const ModelWeightPtr& weight = nullptr) ORT_MUST_USE_RESULT;
 
   common::Status Run(const RunOptions& run_options, gsl::span<const std::string> feed_names,
                      gsl::span<const OrtValue> feeds, gsl::span<const std::string> output_names,

@@ -187,22 +187,22 @@ const SequentialExecutionPlan* SessionState::GetExecutionPlan() const {
 
 Status SessionState::AddInitializedTensor(int ort_value_index, const OrtValue& ort_value, const OrtCallback* d,
                                           bool constant, bool sparse) {
-  auto p = initialized_tensors_.insert({ort_value_index, ort_value});
+  auto p = weight_->initialized_tensors_.insert({ort_value_index, ort_value});
   if (!p.second)
     return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "duplicated ort_value index:", ort_value_index,
                            ". Do you have duplicated calls to SessionState::AddInitializedTensor function?");
 
   if (d != nullptr && d->f != nullptr) {
-    deleter_for_initialized_tensors_.insert_or_assign(ort_value_index, *d);
+    weight_->deleter_for_initialized_tensors_.insert_or_assign(ort_value_index, *d);
   }
 
   if (constant) {
-    constant_initialized_tensors_.insert({ort_value_index, ort_value});
+    weight_->constant_initialized_tensors_.insert({ort_value_index, ort_value});
   }
 
 #if !defined(DISABLE_SPARSE_TENSORS)
   if (sparse) {
-    sparse_initialized_tensors_.insert(ort_value_index);
+    weight_->sparse_initialized_tensors_.insert(ort_value_index);
   }
 #else
   ORT_UNUSED_PARAMETER(sparse);
@@ -211,15 +211,15 @@ Status SessionState::AddInitializedTensor(int ort_value_index, const OrtValue& o
   return Status::OK();
 }
 
-const std::unordered_map<int, OrtValue>& SessionState::GetInitializedTensors() const { return initialized_tensors_; }
+const std::unordered_map<int, OrtValue>& SessionState::GetInitializedTensors() const { return weight_->initialized_tensors_; }
 
 const std::unordered_map<int, OrtValue>& SessionState::GetConstantInitializedTensors() const {
-  return constant_initialized_tensors_;
+  return weight_->constant_initialized_tensors_;
 }
 
 #if !defined(DISABLE_SPARSE_TENSORS)
 bool SessionState::IsSparseInitializer(int ort_value_index) const {
-  return sparse_initialized_tensors_.count(ort_value_index) > 0;
+  return weight_->sparse_initialized_tensors_.count(ort_value_index) > 0;
 }
 #endif
 
@@ -238,8 +238,8 @@ Status SessionState::GetInitializedTensors(
           "Failed to get OrtValue index from name: ", status.ErrorMessage());
       continue;
     }
-    if (initialized_tensors_.find(idx) != initialized_tensors_.end()) {
-      result.emplace(weight_name, initialized_tensors_.at(idx));
+    if (weight_->initialized_tensors_.find(idx) != weight_->initialized_tensors_.end()) {
+      result.emplace(weight_name, weight_->initialized_tensors_.at(idx));
     } else {
       ORT_RETURN_IF_NOT(
           allow_missing_weights,
@@ -313,7 +313,7 @@ Status SessionState::PrepackConstantInitializedTensors(InlinedHashMap<std::strin
           do {
             int ort_value_idx;
             if (st->GetOrtValueNameIdxMap().GetIdx(input_name, ort_value_idx).IsOK()) {
-              std::unordered_map<int, OrtValue>& constant_initialized_tensors = st->constant_initialized_tensors_;
+              std::unordered_map<int, OrtValue>& constant_initialized_tensors = st->weight_->constant_initialized_tensors_;
 
               if (constant_initialized_tensors.count(ort_value_idx)) {
                 bool is_packed = false;
@@ -392,7 +392,7 @@ Status SessionState::PrepackConstantInitializedTensors(InlinedHashMap<std::strin
 
                   if (constant_initializers_use_count.count(input_name) && --constant_initializers_use_count[input_name] == 0) {
                     // release the constant initialized tensor
-                    st->initialized_tensors_.erase(ort_value_idx);
+                    st->weight_->initialized_tensors_.erase(ort_value_idx);
                     constant_initialized_tensors.erase(ort_value_idx);
                   }
                 }
@@ -1040,7 +1040,8 @@ Status SessionState::FinalizeSessionState(const std::basic_string<PATH_CHAR_TYPE
                                           const KernelRegistryManager& kernel_registry_manager,
                                           const SessionOptions& session_options,
                                           bool remove_initializers,
-                                          bool saving_ort_format) {
+                                          bool saving_ort_format,
+                                          const ModelWeightPtr& weight) {
   // recursively create the subgraph session state instances and populate the kernel create info in them.
   // it's simpler to handle the kernel create info recursively when deserializing,
   // so also do it recursively when calling PopulateKernelCreateInfo for consistency.
@@ -1052,7 +1053,7 @@ Status SessionState::FinalizeSessionState(const std::basic_string<PATH_CHAR_TYPE
   InlinedHashMap<std::string, size_t> constant_initializers_use_count;
   ComputeConstantInitializerUseCount(graph_, constant_initializers_use_count);
   return FinalizeSessionStateImpl(graph_location, kernel_registry_manager, nullptr, session_options,
-                                  remove_initializers, constant_initializers_use_count);
+                                  remove_initializers, constant_initializers_use_count, {}, false, weight);
 }
 
 static Status Index(const OrtValueNameIdxMap& ort_value_name_idx_map,
@@ -1187,7 +1188,8 @@ Status SessionState::FinalizeSessionStateImpl(const std::basic_string<PATH_CHAR_
                                               bool remove_initializers,
                                               InlinedHashMap<std::string, size_t>& constant_initializers_use_count,
                                               const InlinedHashMap<OrtValueName, OrtMemoryInfo>& outer_scope_node_arg_to_location_map,
-                                              bool graph_info_already_created) {
+                                              bool graph_info_already_created,
+                                              const ModelWeightPtr& weight) {
   if (!graph_info_already_created) {
     CreateGraphInfo();
   }
@@ -1282,6 +1284,14 @@ Status SessionState::FinalizeSessionStateImpl(const std::basic_string<PATH_CHAR_
 
 #endif
 
+  // qiuhan: If weight is null, means we need create it, otherwise the weight is created and inited by other InferenceSession
+  // and the weight contains all we want
+  weight_ = weight;
+  if (!weight_) {  // Means let's create it and own the weight
+    is_own_weight_ = true;
+    weight_.reset(new ModelWeight);
+  }
+
   ORT_RETURN_IF_ERROR(
       session_state_utils::SaveInitializedTensors(
           Env::Default(), graph_location, *graph_viewer_,
@@ -1289,13 +1299,15 @@ Status SessionState::FinalizeSessionStateImpl(const std::basic_string<PATH_CHAR_
           ort_value_name_idx_map_, initializer_allocation_order, *tensor_allocator,
           [this, remove_initializers](const std::string& name, int idx, const OrtValue& value, const OrtCallback& d,
                                       bool constant, bool sparse) -> Status {
-            ORT_RETURN_IF_ERROR(AddInitializedTensor(idx, value, &d, constant, sparse));
+            if (is_own_weight_) {  // qiuhan: add to weight_ if we own it otherwise skip
+              ORT_RETURN_IF_ERROR(AddInitializedTensor(idx, value, &d, constant, sparse));
+            }
             if (remove_initializers) {
               graph_.RemoveInitializedTensor(name);
             }
             return Status::OK();
           },
-          logger_, data_transfer_mgr_, *p_seq_exec_plan_, session_options, memory_profile_func));
+          logger_, data_transfer_mgr_, *p_seq_exec_plan_, session_options, is_own_weight_, memory_profile_func));
 
 #if !defined(ORT_MINIMAL_BUILD) && defined(ORT_MEMORY_PROFILE)
   // Record Weight allocation info on device
@@ -1311,6 +1323,8 @@ Status SessionState::FinalizeSessionStateImpl(const std::basic_string<PATH_CHAR_
 
   ORT_RETURN_IF_ERROR(CreateKernels(kernel_registry_manager));
 
+  // qiuhan: For weight prepacking, the prepacked_weight_container is created and passed by user through InferenceSession.
+  // So we no need to create and own the container here
 #ifndef ENABLE_TRAINING
   const auto disable_prepacking =
       session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsConfigDisablePrepacking, "0");
@@ -1337,6 +1351,13 @@ Status SessionState::FinalizeSessionStateImpl(const std::basic_string<PATH_CHAR_
     for (const auto& attr_subgraph_pair : node.GetAttributeNameToMutableSubgraphMap()) {
       auto& attr_name = attr_subgraph_pair.first;
       auto entry = node_to_subgraph_ss.second.find(attr_name);
+
+      // qiuhan: If we own the weight, subgraph weight has no been created yet, so we create it
+      ModelWeightPtr subgraph_weight;
+      if (!is_own_weight_) {
+        subgraph_weight = weight_->subgraph_weight_map[node_to_subgraph_ss.first][attr_subgraph_pair.first];
+      }
+
       // CreateSubgraphSessionState should ensure all these entries are created
       ORT_ENFORCE(entry != node_to_subgraph_ss.second.cend(),
                   "Missing session state for subgraph. Node:'", node.Name(),
@@ -1357,7 +1378,10 @@ Status SessionState::FinalizeSessionStateImpl(const std::basic_string<PATH_CHAR_
                                                                subgraph_outer_scope_node_arg_to_location_map));
       ORT_RETURN_IF_ERROR(subgraph_session_state.FinalizeSessionStateImpl(
           graph_location, kernel_registry_manager, &node, subgraph_session_options, remove_initializers,
-          constant_initializers_use_count, subgraph_outer_scope_node_arg_to_location_map, true));
+          constant_initializers_use_count, subgraph_outer_scope_node_arg_to_location_map, true, subgraph_weight));
+      if (is_own_weight_) {
+        weight_->subgraph_weight_map[node_to_subgraph_ss.first][attr_subgraph_pair.first] = subgraph_session_state.GetWeight();
+      }
 
       // setup all the info for handling the feeds and fetches used in subgraph execution
       auto* p_op_kernel = GetMutableKernel(node.Index());

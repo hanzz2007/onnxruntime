@@ -195,6 +195,7 @@ common::Status SaveInitializedTensors(
     const logging::Logger& logger, const DataTransferManager& data_transfer_mgr,
     const ExecutionPlanBase& exec_plan,
     const SessionOptions& session_options,
+    bool is_own_weight,
     const MemoryProfileFunction& memory_profile_func) {
   LOGS(logger, INFO) << "Saving initialized tensors.";
   ORT_ENFORCE(ort_value_name_idx_map.MaxIdx() > -1, "OrtValue indexes should have been populated.");
@@ -301,26 +302,29 @@ common::Status SaveInitializedTensors(
 
     OrtValue ort_value;
 
-    if (user_supplied_initializer_ids.find(entry.first) != user_supplied_initializer_ids.end()) {
-      ort_value = *(session_options.initializers_to_share_map.at(name));
-      LOGS(logger, INFO) << "Using user supplied initializer with name (" << name << ").";
-    } else {
-      const ONNX_NAMESPACE::TensorProto& tensor_proto = *(entry.second);
+    // If don't own the weight, no need to parse the graph initializers
+    if (is_own_weight) {
+      if (user_supplied_initializer_ids.find(entry.first) != user_supplied_initializer_ids.end()) {
+        ort_value = *(session_options.initializers_to_share_map.at(name));
+        LOGS(logger, INFO) << "Using user supplied initializer with name (" << name << ").";
+      } else {
+        const ONNX_NAMESPACE::TensorProto& tensor_proto = *(entry.second);
 
-      std::optional<MemBuffer> m;
-      AllocatorPtr alloc;
-      // TODO: if the tensor need be copied, does it have enough room?
-      ORT_RETURN_IF_ERROR(planner.GetPreallocatedBuffer(ort_value_index, name, m, alloc));
-      bool use_device_allocator_for_initializers =
-          session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsUseDeviceAllocatorForInitializers, "0") == "1";
+        std::optional<MemBuffer> m;
+        AllocatorPtr alloc;
+        // TODO: if the tensor need be copied, does it have enough room?
+        ORT_RETURN_IF_ERROR(planner.GetPreallocatedBuffer(ort_value_index, name, m, alloc));
+        bool use_device_allocator_for_initializers =
+            session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsUseDeviceAllocatorForInitializers, "0") == "1";
 
-      Status st = DeserializeTensorProto(env, graph_loc, tensor_proto, (m.has_value()) ? &*m : nullptr, alloc,
-                                         default_cpu_alloc, ort_value, data_transfer_mgr,
-                                         use_device_allocator_for_initializers);
-      if (!st.IsOK()) {
-        std::ostringstream oss;
-        oss << "Deserialize tensor " << name << " failed." << st.ErrorMessage();
-        return Status(st.Category(), st.Code(), oss.str());
+        Status st = DeserializeTensorProto(env, graph_loc, tensor_proto, (m.has_value()) ? &*m : nullptr, alloc,
+                                          default_cpu_alloc, ort_value, data_transfer_mgr,
+                                          use_device_allocator_for_initializers);
+        if (!st.IsOK()) {
+          std::ostringstream oss;
+          oss << "Deserialize tensor " << name << " failed." << st.ErrorMessage();
+          return Status(st.Category(), st.Code(), oss.str());
+        }
       }
     }
 

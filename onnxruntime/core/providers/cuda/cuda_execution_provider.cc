@@ -504,7 +504,7 @@ Status CUDAExecutionProvider::OnRunEnd(bool sync_stream) {
 
 Status CUDAExecutionProvider::SetComputeStream(void* stream) {
   if (stream != stream_) {
-    if (stream_) {
+    if (stream_) { // BUG: qiuhan what if stream_ is external?
       CUDA_RETURN_IF_ERROR(cudaStreamDestroy(stream_));
     }
 

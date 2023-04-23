@@ -37,6 +37,8 @@
 #include "core/framework/memory_info.h"
 #endif
 
+#include "core/inference/abi_net_options_impl.h"
+
 namespace flatbuffers {
 class FlatBufferBuilder;
 template <typename T>
@@ -110,9 +112,16 @@ class SessionState {
   }
 
   ~SessionState() {
-    for (auto& kvp : deleter_for_initialized_tensors_) {
-      kvp.second.f(kvp.second.param);
-    }
+    weight_.reset();
+    // qiuhan comment out
+    // for (auto& kvp : deleter_for_initialized_tensors_) {
+    //   kvp.second.f(kvp.second.param);
+    // }
+  }
+
+  ModelWeightPtr GetWeight() const
+  {
+    return weight_;
   }
 
   // Graph viewer. CreateGraphInfo must have been called previously.
@@ -307,7 +316,8 @@ class SessionState {
                               const KernelRegistryManager& kernel_registry_manager,
                               const SessionOptions& session_options = {},
                               bool remove_initializers = true,
-                              bool saving_ort_format = false);
+                              bool saving_ort_format = false,
+                              const ModelWeightPtr& weight = nullptr);
 
   SessionState* Parent() {
     return parent_;
@@ -378,7 +388,8 @@ class SessionState {
                                   bool remove_initializers,
                                   InlinedHashMap<std::string, size_t>& constant_initializers_use_count,
                                   const InlinedHashMap<OrtValueName, OrtMemoryInfo>& outer_scope_node_arg_to_location_map = {},
-                                  bool graph_info_already_created = false);
+                                  bool graph_info_already_created = false,
+                                  const ModelWeightPtr& weight = nullptr);
 
 #ifdef ENABLE_TRAINING
   Status GeneratePatternGroupCache(
@@ -446,22 +457,25 @@ class SessionState {
 
   OrtValueNameIdxMap ort_value_name_idx_map_;
 
-  // initialized tensors
-  std::unordered_map<int, OrtValue> initialized_tensors_;  // key is ort_value_index
-  // subset of initialized_tensors_ that are constant and cannot be overridden at runtime
-  std::unordered_map<int, OrtValue> constant_initialized_tensors_;
+  bool is_own_weight_{false};
+  ModelWeightPtr weight_;
+  // qiuhan Comment out
+//   // initialized tensors
+//   std::unordered_map<int, OrtValue> initialized_tensors_;  // key is ort_value_index
+//   // subset of initialized_tensors_ that are constant and cannot be overridden at runtime
+//   std::unordered_map<int, OrtValue> constant_initialized_tensors_;
 
-#if !defined(DISABLE_SPARSE_TENSORS)
-  // This is an auxiliary lookup to check if the OrtValue was actually a sparse tensor
-  // this is needed because we currently convert all sparse initializer into dense Tensors
-  // if and when we actually place SparseTensor instances (we should) into OrtValues, we
-  // will not need this structure.
-  InlinedHashSet<int> sparse_initialized_tensors_;
-#endif
+// #if !defined(DISABLE_SPARSE_TENSORS)
+//   // This is an auxiliary lookup to check if the OrtValue was actually a sparse tensor
+//   // this is needed because we currently convert all sparse initializer into dense Tensors
+//   // if and when we actually place SparseTensor instances (we should) into OrtValues, we
+//   // will not need this structure.
+//   InlinedHashSet<int> sparse_initialized_tensors_;
+// #endif
 
   // This data structure is for uninitializing string tensors and
   // munmap memory region and close file descriptor
-  InlinedHashMap<int, OrtCallback> deleter_for_initialized_tensors_;
+  // InlinedHashMap<int, OrtCallback> deleter_for_initialized_tensors_;
   InlinedVector<BufferUniquePtr> weights_buffers_;
   std::optional<SequentialExecutionPlan> p_seq_exec_plan_;
 
