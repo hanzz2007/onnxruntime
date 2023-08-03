@@ -157,9 +157,18 @@
         "assert": "cpp",
         "cpu_provider_factory.h": "c",
         "onnxruntime_c_api.h": "c",
-        "climits": "c"
+        "climits": "c",
+        "tensor": "cpp",
+        "png.h": "c",
+        "geometry": "cpp",
+        "qtalignedmalloc": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "mprealsupport": "cpp"
     },
     "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
         "cppcoreguidelines-avoid-do-while"
     ],
+    "cmake.sourceDirectory": "/home/qiuhan/project/onnxruntime_qiuhan/cmake",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
 }
